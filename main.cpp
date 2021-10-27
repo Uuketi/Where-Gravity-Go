@@ -11,7 +11,6 @@
 #include "beatsaber-hook/shared/config/config-utils.hpp"
 #include "GlobalNamespace/OVRInput.hpp"
 #include "GlobalNamespace/OVRInput_Button.hpp"
-#include "GlobalNamespace/OVRInput_RawAxis1D.hpp.hpp"
 #include "UnityEngine/Vector3.hpp"
 #include "UnityEngine/Transform.hpp"
 #include "UnityEngine/Rigidbody.hpp"
@@ -45,20 +44,24 @@ Logger& getLogger() {
 
 bool inRoom = false;
 bool buttonYes = false;
+bool freeze = false;
 float globalGravity = -9.81;
 float configmult = 0.0;
 
 #include "GlobalNamespace/GorillaTagManager.hpp"
 
 MAKE_HOOK_MATCH(GorillaTagManager_Update, &GlobalNamespace::GorillaTagManager::Update, void, GlobalNamespace::GorillaTagManager* self) {
-    if (config.enabled) {
+    if (inRoom && config.enabled) {
     Player* playerInstance = Player::get_Instance();
     Rigidbody* playerPhysics = playerInstance->playerRigidBody;
     if(playerPhysics == nullptr) return;
     GameObject* playerGameObject = playerPhysics->get_gameObject();
     if(playerGameObject == nullptr) return;
-    auto* player = playerGameObject->GetComponent<GorillaLocomotion::Player*>(); 
+    auto* player = playerGameObject->GetComponent<GorillaLocomotion::Player*>();
+
     buttonYes = OVRInput::Get(OVRInput::Button::One, OVRInput::Controller::RTouch);
+    freeze = OVRInput::Get(OVRInput::Button::One, OVRInput::Controller::LTouch);
+    
     if (buttonYes == true)
     {
         configmult = config.multiplier / 5.0;
@@ -67,15 +70,18 @@ MAKE_HOOK_MATCH(GorillaTagManager_Update, &GlobalNamespace::GorillaTagManager::U
         playerPhysics->AddForce(gravity, UnityEngine::ForceMode::Acceleration);
     }
     else
+    if (freeze == true)
     {
-        Player* playerInstance = Player::get_Instance();
-        Rigidbody* playerPhysics = playerInstance->playerRigidBody;
-        if(playerPhysics == nullptr) return;
+        playerPhysics->set_useGravity(false);
+        playerPhysics->set_velocity(Vector3::get_zero());
+    }
+    else
+    {
         playerPhysics->set_useGravity(true);
     }
     GorillaTagManager_Update(self);
     }
-    else
+    if (!inRoom)
     {
         Player* playerInstance = Player::get_Instance();
         Rigidbody* playerPhysics = playerInstance->playerRigidBody;
@@ -84,6 +90,7 @@ MAKE_HOOK_MATCH(GorillaTagManager_Update, &GlobalNamespace::GorillaTagManager::U
     }
     GorillaTagManager_Update(self);
 }
+
 MAKE_HOOK_MATCH(Player_Awake, &GorillaLocomotion::Player::Awake, void, GorillaLocomotion::Player* self) {
     Player_Awake(self);
     GorillaUtils::MatchMakingCallbacks::onJoinedRoomEvent() += {[&]() {
